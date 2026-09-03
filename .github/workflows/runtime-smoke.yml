@@ -3,6 +3,8 @@ name: Runtime compatibility smoke
 on:
   push:
     branches: [main]
+    paths:
+      - .github/workflows/runtime-smoke.yml
   workflow_dispatch:
 
 permissions:
