@@ -1,0 +1,57 @@
+name: Runtime compatibility smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-actions-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify github-script v9 runtime and Octokit
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const major = Number(process.versions.node.split('.')[0]);
+            if (major < 24) {
+              core.setFailed(`github-script v9 requires Node 24+, got ${process.version}`);
+              return;
+            }
+            const { data: repo } = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            if (repo.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+              core.setFailed(`Unexpected repository identity: ${repo.full_name}`);
+              return;
+            }
+            core.notice(`GITHUB_SCRIPT_V9_VERIFIED node=${process.version} repo=${repo.full_name} sha=${context.sha}`);
+
+      - name: Create deterministic artifact fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'repository=%s\nsha=%s\nrun_id=%s\n' \
+            "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_RUN_ID" \
+            > actions-runtime-compatibility.txt
+          test -s actions-runtime-compatibility.txt
+
+      - name: Verify upload-artifact v7 runtime
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: actions-runtime-compatibility-${{ github.run_id }}
+          path: actions-runtime-compatibility.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Emit compatibility evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ACTIONS_RUNTIME_COMPATIBILITY_EVIDENCE sha=${GITHUB_SHA} github_script=v9.0.0 upload_artifact=v7.0.1"
+          echo "ACTIONS RUNTIME COMPATIBILITY VERIFIED."
